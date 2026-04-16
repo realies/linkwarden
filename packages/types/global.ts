@@ -130,9 +130,21 @@ export interface Backup extends Omit<User, "password" | "id"> {
   pinnedLinks: LinksIncludingTags[];
 }
 
+export type MigrationTarget = {
+  // Existing collection to import into. Takes precedence over `collectionName`.
+  collectionId?: number;
+  // Name of a collection to create (or to find+reuse by name at the top level).
+  collectionName?: string;
+  // Tag names to apply to every imported link. Tags are created on demand.
+  tags?: string[];
+};
+
 export type MigrationRequest = {
   format: MigrationFormat;
   data: string;
+  // Currently only honoured by the `text` format. Other importers carry their
+  // own collection structure inside the file being imported.
+  target?: MigrationTarget;
 };
 
 export enum MigrationFormat {
@@ -141,6 +153,7 @@ export enum MigrationFormat {
   wallabag = 2,
   omnivore = 3,
   pocket = 4,
+  text = 5,
 }
 
 export enum Plan {
