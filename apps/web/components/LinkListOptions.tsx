@@ -153,7 +153,7 @@ const LinkListOptions = ({
 
       {links && editMode && links.length > 0 && (
         <div className="w-full flex justify-between items-center min-h-[32px]">
-          <div className="flex gap-3 ml-3">
+          <div className="flex gap-3 ml-3 items-center flex-wrap">
             <input
               type="checkbox"
               className="checkbox checkbox-primary"
@@ -171,6 +171,9 @@ const LinkListOptions = ({
             ) : (
               <span>{t("nothing_selected")}</span>
             )}
+            <span className="text-xs text-neutral hidden sm:inline">
+              {t("shift_click_range_tip")}
+            </span>
           </div>
           <div className="flex gap-3">
             <TooltipProvider>

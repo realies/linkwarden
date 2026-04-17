@@ -2,11 +2,13 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import exportData from "@/lib/api/controllers/migration/exportData";
 import importFromHTMLFile from "@/lib/api/controllers/migration/importFromHTMLFile";
 import importFromLinkwarden from "@/lib/api/controllers/migration/importFromLinkwarden";
-import { MigrationFormat, MigrationRequest } from "@linkwarden/types/global";
+import { MigrationFormat } from "@linkwarden/types/global";
+import { MigrationRequestSchema } from "@linkwarden/lib/schemaValidation";
 import verifyUser from "@/lib/api/verifyUser";
 import importFromWallabag from "@/lib/api/controllers/migration/importFromWallabag";
 import importFromOmnivore from "@/lib/api/controllers/migration/importFromOmnivore";
 import importFromPocket from "@/lib/api/controllers/migration/importFromPocket";
+import importFromText from "@/lib/api/controllers/migration/importFromText";
 
 export const config = {
   api: {
@@ -65,26 +67,41 @@ export default async function users(req: NextApiRequest, res: NextApiResponse) {
           "This action is disabled because this is a read-only demo of Linkwarden.",
       });
 
-    let request: MigrationRequest;
+    // Hoisted above the try so the 413 response reports the actually-
+    // enforced MB cap (not the raw env var, which may be garbage the
+    // runtime fell back from).
+    const parsedLimit = parseInt(process.env.IMPORT_LIMIT ?? "", 10);
+    // Guard against a non-numeric IMPORT_LIMIT env var. Previously a
+    // garbage value produced `NaN * 1024 * 1024 === NaN`, which made the
+    // `totalLength > limitBytes` check always false and effectively
+    // disabled the body-size cap. Fall back to the 10 MB default instead.
+    const limitMb =
+      Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 10;
+
+    let rawRequest: unknown;
 
     try {
-      const limitMb = process.env.IMPORT_LIMIT
-        ? parseInt(process.env.IMPORT_LIMIT, 10)
-        : 10;
-
-      request = await parseJsonStream(req, limitMb);
-    } catch (error: any) {
-      if (error.message === "Payload Too Large") {
+      rawRequest = await parseJsonStream(req, limitMb);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === "Payload Too Large") {
         return res.status(413).json({
-          response: `Import file exceeds the ${
-            process.env.IMPORT_LIMIT || 10
-          }MB size limit.`,
+          response: `Import file exceeds the ${limitMb}MB size limit.`,
         });
       }
       return res
         .status(400)
         .json({ response: "Invalid request body provided." });
     }
+
+    const validation = MigrationRequestSchema.safeParse(rawRequest);
+    if (!validation.success) {
+      const first = validation.error.issues[0];
+      const path = first?.path?.join(".") || "body";
+      return res.status(400).json({
+        response: `Invalid migration request: ${first?.message ?? "validation error"} [${path}]`,
+      });
+    }
+    const request = validation.data;
 
     let data;
     if (request.format === MigrationFormat.htmlFile)
@@ -97,6 +114,18 @@ export default async function users(req: NextApiRequest, res: NextApiResponse) {
       data = await importFromOmnivore(user.id, request.data);
     else if (request.format === MigrationFormat.pocket)
       data = await importFromPocket(user.id, request.data);
+    else if (request.format === MigrationFormat.text)
+      data = await importFromText(user.id, request.data, request.target);
+    else {
+      // Exhaustiveness guard: if `MigrationFormat` ever grows a new value
+      // and this dispatcher is not updated, `_exhaustive` becomes a type
+      // error at compile time. At runtime we still return a clear 400
+      // rather than falling through to a silent empty response.
+      const _exhaustive: never = request.format;
+      return res.status(400).json({
+        response: `Unsupported migration format: ${String(_exhaustive)}`,
+      });
+    }
 
     if (data) return res.status(data.status).json({ response: data.response });
   }

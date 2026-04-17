@@ -4,11 +4,10 @@ import {
   LinkIncludingShortenedCollectionAndTags,
   ViewMode,
 } from "@linkwarden/types/global";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInView } from "react-intersection-observer";
 import LinkMasonry from "@/components/LinkViews/LinkComponents/LinkMasonry";
 import Masonry from "react-masonry-css";
-import { useMemo } from "react";
 import LinkList from "@/components/LinkViews/LinkComponents/LinkList";
 import useLocalSettingsStore from "@/store/localSettings";
 import { useCollections } from "@linkwarden/router/collections";
@@ -19,6 +18,8 @@ import useLinkStore from "@/store/links";
 import useMediaQuery from "@/hooks/useMediaQuery";
 import { useUser } from "@linkwarden/router/user";
 
+type LinkSelectHandler = (id: number, event: React.MouseEvent) => void;
+
 function CardView({
   links,
   collectionsById,
@@ -27,7 +28,7 @@ function CardView({
   user,
   disableDraggable,
   isSelected,
-  toggleSelected,
+  onLinkSelect,
   editMode,
   isLoading,
   hasNextPage,
@@ -40,7 +41,7 @@ function CardView({
   user: any;
   disableDraggable: boolean;
   isSelected: (id: number) => boolean;
-  toggleSelected: (id: number) => void;
+  onLinkSelect: LinkSelectHandler;
   editMode: boolean;
   isLoading: boolean;
   hasNextPage: boolean;
@@ -131,7 +132,7 @@ function CardView({
             user={user}
             disableDraggable={disableDraggable}
             isSelected={selected}
-            toggleSelected={toggleSelected}
+            onLinkSelect={onLinkSelect}
             editMode={editMode}
             imageHeightClass={imageHeightClass}
           />
@@ -159,7 +160,7 @@ function MasonryView({
   disableDraggable,
   user,
   isSelected,
-  toggleSelected,
+  onLinkSelect,
   editMode,
   isLoading,
   hasNextPage,
@@ -172,7 +173,7 @@ function MasonryView({
   disableDraggable: boolean;
   user: any;
   isSelected: (id: number) => boolean;
-  toggleSelected: (id: number) => void;
+  onLinkSelect: LinkSelectHandler;
   editMode: boolean;
   isLoading: boolean;
   hasNextPage: boolean;
@@ -271,7 +272,7 @@ function MasonryView({
             disableDraggable={disableDraggable}
             user={user}
             isSelected={selected}
-            toggleSelected={toggleSelected}
+            onLinkSelect={onLinkSelect}
             imageHeightClass={imageHeightClass}
             editMode={editMode}
           />
@@ -299,7 +300,7 @@ function ListView({
   disableDraggable,
   user,
   isSelected,
-  toggleSelected,
+  onLinkSelect,
   editMode,
   isLoading,
   hasNextPage,
@@ -312,7 +313,7 @@ function ListView({
   disableDraggable: boolean;
   user: any;
   isSelected: (id: number) => boolean;
-  toggleSelected: (id: number) => void;
+  onLinkSelect: LinkSelectHandler;
   editMode: boolean;
   isLoading: boolean;
   hasNextPage: boolean;
@@ -334,7 +335,7 @@ function ListView({
             disableDraggable={disableDraggable}
             user={user}
             isSelected={selected}
-            toggleSelected={toggleSelected}
+            onLinkSelect={onLinkSelect}
             count={i}
             editMode={editMode}
           />
@@ -394,13 +395,47 @@ export default function Links({
     return m;
   }, [collections]);
 
-  const { clearSelected, isSelected, toggleSelected } = useLinkStore();
+  const { clearSelected, isSelected, toggleSelected, selectRange } =
+    useLinkStore();
 
   useEffect(() => {
     if (!editMode) {
       clearSelected();
     }
   }, [editMode]);
+
+  // `LinkIncludingShortenedCollectionAndTags.id` is typed `number | undefined`
+  // because the same shape is reused in optimistic-create flows before the
+  // server assigns an id. Selection can only act on persisted rows, so
+  // filter out undefined ids here to keep `orderedIds` a well-typed
+  // `number[]` (no `as number` escape hatch needed downstream).
+  const orderedIds = useMemo<number[]>(
+    () =>
+      (links ?? [])
+        .map((l) => l.id)
+        .filter((id): id is number => typeof id === "number"),
+    [links]
+  );
+
+  // Handle Shift+click for range selection (mimics OS file-manager behaviour).
+  // The anchor is the most recent non-shift selection; shift-click extends to
+  // the clicked item, selecting everything in between.
+  const onLinkSelect = useCallback<LinkSelectHandler>(
+    (id, event) => {
+      const anchor = useLinkStore.getState().lastSelectedId;
+      if (event.shiftKey && anchor !== null && anchor !== id) {
+        selectRange(anchor, id, orderedIds);
+        // Prevent text selection side-effects when shift-clicking through a
+        // list of cards.
+        const selection =
+          typeof window !== "undefined" ? window.getSelection?.() : null;
+        selection?.removeAllRanges?.();
+        return;
+      }
+      toggleSelected(id);
+    },
+    [orderedIds, selectRange, toggleSelected]
+  );
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -437,7 +472,7 @@ export default function Links({
         t={t}
         disableDraggable={disableDraggable}
         user={user}
-        toggleSelected={toggleSelected}
+        onLinkSelect={onLinkSelect}
         isSelected={isSelected}
         editMode={editMode || false}
         isLoading={useData?.isLoading}
@@ -454,7 +489,7 @@ export default function Links({
         t={t}
         disableDraggable={disableDraggable}
         user={user}
-        toggleSelected={toggleSelected}
+        onLinkSelect={onLinkSelect}
         isSelected={isSelected}
         editMode={editMode || false}
         isLoading={useData?.isLoading}
@@ -472,7 +507,7 @@ export default function Links({
         t={t}
         user={user}
         disableDraggable={disableDraggable}
-        toggleSelected={toggleSelected}
+        onLinkSelect={onLinkSelect}
         isSelected={isSelected}
         editMode={editMode || false}
         isLoading={useData?.isLoading}

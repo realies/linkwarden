@@ -1,4 +1,8 @@
-import { ArchivedFormat, TokenExpiry } from "@linkwarden/types/global";
+import {
+  ArchivedFormat,
+  MigrationFormat,
+  TokenExpiry,
+} from "@linkwarden/types/global";
 import {
   AiTaggingMethod,
   LinksRouteTo,
@@ -321,3 +325,41 @@ export const UpdateDashboardLayoutSchema = z.array(
 export type UpdateDashboardLayoutSchemaType = z.infer<
   typeof UpdateDashboardLayoutSchema
 >;
+
+// ---------------------------------------------------------------------------
+// Migration (paste/import) request validation.
+//
+// The migration endpoint streams a raw JSON body (bodyParser is disabled so
+// we can enforce an `IMPORT_LIMIT` MB cap manually). Before this schema was
+// added, the parsed body was cast straight to `MigrationRequest` with no
+// runtime checks: a client could POST `{format:5, data:42, target:{
+// collectionId:"abc"}}` and reach Prisma with invalid types. The schema also
+// bakes in the tag-count and tag/collection-name length caps so the
+// importers don't have to guess at what a caller sent.
+// ---------------------------------------------------------------------------
+export const MAX_IMPORT_TAGS = 50;
+export const MAX_IMPORT_TAG_LENGTH = 50;
+export const MAX_IMPORT_COLLECTION_NAME_LENGTH = 254;
+
+export const MigrationRequestSchema = z.object({
+  format: z.nativeEnum(MigrationFormat),
+  // Format-specific controllers do their own content parsing; at this layer
+  // we just require it to be a string. Size is policed by `parseJsonStream`.
+  data: z.string(),
+  target: z
+    .object({
+      collectionId: z.number().int().positive().optional(),
+      collectionName: z
+        .string()
+        .trim()
+        .max(MAX_IMPORT_COLLECTION_NAME_LENGTH)
+        .optional(),
+      tags: z
+        .array(z.string().trim().max(MAX_IMPORT_TAG_LENGTH))
+        .max(MAX_IMPORT_TAGS)
+        .optional(),
+    })
+    .optional(),
+});
+
+export type MigrationRequestSchemaType = z.infer<typeof MigrationRequestSchema>;

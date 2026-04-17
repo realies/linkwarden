@@ -15,7 +15,6 @@ import {
 } from "@linkwarden/lib/formatStats";
 import Link from "next/link";
 import LinkIcon from "./LinkIcon";
-import toast from "react-hot-toast";
 import LinkTypeBadge from "./LinkTypeBadge";
 import useLocalSettingsStore from "@/store/localSettings";
 import clsx from "clsx";
@@ -36,7 +35,7 @@ type Props = {
   disableDraggable: boolean;
   user: any;
   isSelected: boolean;
-  toggleSelected: (id: number) => void;
+  onLinkSelect: (id: number, event: React.MouseEvent) => void;
   imageHeightClass: string;
   editMode?: boolean;
 };
@@ -49,7 +48,7 @@ function LinkMasonry({
   disableDraggable,
   user,
   isSelected,
-  toggleSelected,
+  onLinkSelect,
   imageHeightClass,
   editMode,
 }: Props) {
@@ -77,13 +76,13 @@ function LinkMasonry({
         "border border-solid border-neutral-content bg-base-200 shadow-md hover:shadow-none duration-100 rounded-xl relative group",
         isSelected && "border-primary bg-base-300"
       )}
-      onClick={() =>
-        editMode
-          ? toggleSelected(link.id as number)
-          : editMode
-            ? toast.error(t("link_selection_error"))
-            : undefined
-      }
+      onClick={(e) => {
+        // Optimistic rows with no server-assigned id can't participate in
+        // selection; silently ignore the click so the range store never
+        // sees `NaN`.
+        if (!editMode || typeof link.id !== "number") return;
+        onLinkSelect(link.id, e);
+      }}
     >
       <div ref={ref}>
         <div

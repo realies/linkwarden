@@ -14,7 +14,6 @@ import {
   formatAvailable,
 } from "@linkwarden/lib/formatStats";
 import LinkIcon from "./LinkIcon";
-import toast from "react-hot-toast";
 import LinkTypeBadge from "./LinkTypeBadge";
 import useLocalSettingsStore from "@/store/localSettings";
 import LinkPin from "./LinkPin";
@@ -33,7 +32,7 @@ type Props = {
   user: any;
   disableDraggable: boolean;
   isSelected: boolean;
-  toggleSelected: (id: number) => void;
+  onLinkSelect: (id: number, event: React.MouseEvent) => void;
   imageHeightClass: string;
   editMode?: boolean;
 };
@@ -46,7 +45,7 @@ function LinkCard({
   user,
   disableDraggable,
   isSelected,
-  toggleSelected,
+  onLinkSelect,
   imageHeightClass,
   editMode,
 }: Props) {
@@ -76,13 +75,13 @@ function LinkCard({
         isDragging ? "opacity-30" : "opacity-100",
         "relative group touch-manipulation select-none"
       )}
-      onClick={() =>
-        editMode
-          ? toggleSelected(link.id as number)
-          : editMode
-            ? toast.error(t("link_selection_error"))
-            : undefined
-      }
+      onClick={(e) => {
+        // Optimistic rows with no server-assigned id can't participate in
+        // selection; silently ignore the click so the range store never
+        // sees `NaN`.
+        if (!editMode || typeof link.id !== "number") return;
+        onLinkSelect(link.id, e);
+      }}
     >
       <div ref={ref} className="h-full">
         <div

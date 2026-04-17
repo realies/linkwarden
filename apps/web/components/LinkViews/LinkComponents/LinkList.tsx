@@ -9,7 +9,6 @@ import LinkDate from "@/components/LinkViews/LinkComponents/LinkDate";
 import LinkCollection from "@/components/LinkViews/LinkComponents/LinkCollection";
 import LinkIcon from "@/components/LinkViews/LinkComponents/LinkIcon";
 import { cn, isPWA } from "@/lib/utils";
-import toast from "react-hot-toast";
 import LinkTypeBadge from "./LinkTypeBadge";
 import useLocalSettingsStore from "@/store/localSettings";
 import LinkPin from "./LinkPin";
@@ -27,7 +26,7 @@ type Props = {
   disableDraggable: boolean;
   user: any;
   isSelected: boolean;
-  toggleSelected: (id: number) => void;
+  onLinkSelect: (id: number, event: React.MouseEvent) => void;
   count: number;
   className?: string;
   editMode?: boolean;
@@ -41,7 +40,7 @@ function LinkList({
   disableDraggable,
   user,
   isSelected,
-  toggleSelected,
+  onLinkSelect,
   editMode,
 }: Props) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -72,13 +71,13 @@ function LinkList({
           isDragging ? "opacity-30" : "opacity-100",
           "duration-200, touch-manipulation select-none"
         )}
-        onClick={() =>
-          editMode
-            ? toggleSelected(link.id as number)
-            : editMode
-              ? toast.error(t("link_selection_error"))
-              : undefined
-        }
+        onClick={(e) => {
+          // Optimistic rows with no server-assigned id can't participate in
+          // selection; silently ignore the click so the range store never
+          // sees `NaN`.
+          if (!editMode || typeof link.id !== "number") return;
+          onLinkSelect(link.id, e);
+        }}
       >
         <div
           className="flex items-center cursor-pointer w-full min-h-12"
